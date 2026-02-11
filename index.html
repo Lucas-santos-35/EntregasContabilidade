@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monttirô Contabilidade - Logística</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --marinho: #0f172a; --conexao: #06b6d4; }
+        body { background-color: #cbd5e1; font-family: 'Inter', sans-serif; }
+        .app-container { max-width: 500px; margin: 0 auto; background-color: #f1f5f9; min-height: 100vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .tab-active { color: var(--conexao); border-bottom: 2px solid var(--conexao); font-weight: 800; }
+        .card-done { border-left: 4px solid #10b981; background-color: #f0fdf4; }
+        .card-fail { border-left: 4px solid #ef4444; background-color: #fef2f2; }
+        input[type="number"]::-webkit-inner-spin-button { display: none; }
+        #pdf-template { position: absolute; left: -9999px; top: -9999px; width: 800px; background: white; padding: 40px; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- Header Compacto -->
+        <header class="bg-[#0f172a] text-white p-4 pb-2 shadow-xl sticky top-0 z-50">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-cyan-500 p-1 rounded-full">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    </div>
+                    <div>
+                        <h1 class="text-sm font-bold italic leading-tight">Monttirô Contabilidade</h1>
+                        <p class="text-[7px] uppercase tracking-[0.2em] text-cyan-400 font-bold">Logística Daniels DEV</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <!-- Contador Discreto -->
+                    <div class="text-[9px] font-bold px-2 py-1 bg-slate-800 rounded-md border border-slate-700">
+                        <span id="count-feito" class="text-emerald-400">0</span><span class="text-slate-500 mx-0.5">/</span><span id="count-total">0</span>
+                    </div>
+                    <!-- Upload Foto -->
+                    <label class="cursor-pointer bg-slate-800 p-1.5 rounded-md border border-slate-700 hover:bg-slate-700 transition-colors">
+                        <svg id="cam-icon" class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <input type="file" accept="image/*" class="hidden" onchange="uploadKm(event)">
+                    </label>
+                </div>
+            </div>
+
+            <!-- KM Bar - Discreta -->
+            <div class="flex items-center gap-2 border-t border-slate-800 pt-2 pb-1">
+                <div class="flex-1 flex items-center bg-slate-900/50 px-2 py-1 rounded border border-slate-800">
+                    <span class="text-[6px] text-slate-500 uppercase font-black mr-2">INI</span>
+                    <input type="number" id="km-inicial" oninput="saveKms()" class="bg-transparent w-full text-[10px] font-bold focus:outline-none text-slate-200" placeholder="0">
+                </div>
+                <div class="flex-1 flex items-center bg-slate-900/50 px-2 py-1 rounded border border-slate-800">
+                    <span class="text-[6px] text-slate-500 uppercase font-black mr-2">FIM</span>
+                    <input type="number" id="km-final" oninput="saveKms()" class="bg-transparent w-full text-[10px] font-bold focus:outline-none text-slate-200" placeholder="0">
+                </div>
+                <div id="km-status-dot" class="w-2 h-2 rounded-full bg-slate-700"></div>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <nav class="flex bg-white border-b sticky top-[92px] z-40 shadow-sm">
+            <button onclick="setTab('rota')" id="tab-rota" class="flex-1 py-3 text-[9px] font-bold uppercase tab-active">Rota</button>
+            <button onclick="setTab('clientes')" id="tab-clientes" class="flex-1 py-3 text-[9px] font-bold uppercase text-slate-400">Clientes</button>
+            <button onclick="setTab('concluidos')" id="tab-concluidas" class="flex-1 py-3 text-[9px] font-bold uppercase text-slate-400">Feito</button>
+        </nav>
+
+        <main id="list-container" class="p-3 space-y-2 pb-24 flex-grow overflow-y-auto">
+            <!-- Lista -->
+        </main>
+
+        <div class="fixed bottom-4 left-1/2 -translate-x-1/2 w-full max-w-[460px] px-4">
+            <button onclick="generatePDF()" class="w-full bg-slate-900 text-white py-3.5 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-2xl active:scale-95 transition-transform">
+                Gerar Prestação de Contas
+            </button>
+        </div>
+    </div>
+
+    <!-- PDF Template Oculto -->
+    <div id="pdf-template">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px;">
+            <div>
+                <h1 style="color: #0f172a; margin: 0; font-size: 24px; font-style: italic;">Monttirô Contabilidade</h1>
+                <p style="margin: 0; font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 2px;">Relatório de Logística e Quilometragem</p>
+            </div>
+            <div style="text-align: right;">
+                <p style="margin: 0; font-size: 11px; font-weight: bold;" id="pdf-date-field"></p>
+                <p style="margin: 5px 0 0; font-size: 16px; font-weight: 900; color: #06b6d4;" id="pdf-km-total">0 KM PERCORRIDOS</p>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; background: #f8fafc; padding: 15px; border-radius: 8px;">
+            <div>
+                <h3 style="font-size: 10px; text-transform: uppercase; color: #475569; margin-bottom: 8px; border-bottom: 1px solid #cbd5e1;">Resumo da Jornada</h3>
+                <p style="font-size: 11px; margin: 4px 0;">KM Inicial: <strong id="pdf-km-ini">0</strong></p>
+                <p style="font-size: 11px; margin: 4px 0;">KM Final: <strong id="pdf-km-fim">0</strong></p>
+                <p style="font-size: 11px; margin: 4px 0;">Entregas Concluídas: <strong id="pdf-count-ok">0</strong></p>
+            </div>
+            <div style="text-align: right;">
+                <p style="font-size: 8px; color: #94a3b8; font-weight: bold; margin-bottom: 4px; text-transform: uppercase;">Evidência do Painel</p>
+                <div style="width: 200px; height: 120px; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; margin-left: auto; background: #fff; display: flex; align-items: center; justify-content: center;">
+                    <img id="pdf-km-img-box" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;">
+                    <span id="pdf-no-photo" style="font-size: 8px; color: #cbd5e1;">FOTO NÃO ANEXADA</span>
+                </div>
+            </div>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+            <thead>
+                <tr style="background: #0f172a; color: white;">
+                    <th style="padding: 10px; text-align: left; border-radius: 4px 0 0 0;">CLIENTE</th>
+                    <th style="padding: 10px; text-align: left;">ENDEREÇO</th>
+                    <th style="padding: 10px; text-align: center; border-radius: 0 4px 0 0;">STATUS</th>
+                </tr>
+            </thead>
+            <tbody id="pdf-rows"></tbody>
+        </table>
+
+        <div style="margin-top: 80px; text-align: center;">
+            <div style="border-top: 1px solid #0f172a; width: 200px; margin: 0 auto; padding-top: 5px;">
+                <p style="font-weight: 900; margin: 0; font-size: 12px; letter-spacing: 1px;">DANIELS DEV</p>
+                <p style="font-size: 8px; color: #64748b; text-transform: uppercase;">Assinatura do Motorista</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const initialAddresses = [
+            { id: 1, emp: "Hotel Manferrari", end: "Av. João César de Oliveira 1090, Eldorado", cid: "Contagem", obs: "6 UNIDADES", cnpj: "00.000.000/0001-01", status: 'pendente' },
+            { id: 2, emp: "Helcio Luz Divina", end: "Av. José Faria da Rocha 5628, Eldorado", cid: "Contagem", obs: "1 UNIDADE", cnpj: "00.000.000/0001-02", status: 'pendente' },
+            { id: 3, emp: "Clínica Odonto Karine/Melissa", end: "Rua Norberto Mayer 626, Eldorado", cid: "Contagem", obs: "2 UNIDADES", cnpj: "00.000.000/0001-03", status: 'pendente' },
+            { id: 4, emp: "Gonçalves e Melo", end: "Edmir Leão 189, Centro/Arcadia", cid: "Contagem", obs: "3 UNIDADES", cnpj: "00.000.000/0001-04", status: 'pendente' },
+            { id: 5, emp: "Coworking Santos", end: "R. Joaquim José 246", cid: "Contagem", obs: "Entregar", cnpj: "00.000.000/0001-05", status: 'pendente' },
+            { id: 6, emp: "Ora Corretora (Gabriele)", end: "Rua Camber 211, Pindorama", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-06", status: 'pendente' },
+            { id: 7, emp: "Casinha Feliz (Camila/Fabiane)", end: "Rua Anchieta 323, Padre Eustáquio", cid: "BH", obs: "2 UNIDADES", cnpj: "00.000.000/0001-07", status: 'pendente' },
+            { id: 8, emp: "Leidilene", end: "Rua Osório de Morais 201, Ouro Preto", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-08", status: 'pendente' },
+            { id: 9, emp: "Serrano", end: "A. Professor Clovis Salgado 2545, Serrano", cid: "BH", obs: "2 UNIDADES", cnpj: "00.000.000/0001-09", status: 'pendente' },
+            { id: 10, emp: "Zayra", end: "Rua Passos 234, Canadá", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-10", status: 'pendente' },
+            { id: 11, emp: "Samira", end: "Av. Presidente 1110, Copacabana", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-11", status: 'pendente' },
+            { id: 12, emp: "Rafa Calu", end: "R. Ivartt Maria Mota 176, São João Batista", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-12", status: 'pendente' },
+            { id: 13, emp: "Iorrana", end: "Pc. Jose Belem Barbosa 150, São João Batista", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-13", status: 'pendente' },
+            { id: 14, emp: "Alexsandro", end: "Rua Arnaldo Lourenço 135, Pousada Santo Antonio", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-14", status: 'pendente' },
+            { id: 15, emp: "Juliana", end: "Rua Nova Lima 269, Itacolomi", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-15", status: 'pendente' },
+            { id: 16, emp: "Joaquim Nunes", end: "Av. Senhor do Bonfim 649, São Benedito", cid: "Sta Luzia", obs: "1 UNIDADE", cnpj: "00.000.000/0001-16", status: 'pendente' },
+            { id: 17, emp: "Vida de Cão (Jussara)", end: "Rua Fabio Vaz de Melo 215, Ipê", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-17", status: 'pendente' },
+            { id: 18, emp: "JMC Débora", end: "R. Francisco Assis de Freitas 30, Jardim Vitória", cid: "BH", obs: "4 UNIDADES", cnpj: "00.000.000/0001-18", status: 'pendente' },
+            { id: 19, emp: "Rogerio Lanchonete", end: "Avenida Magenta 571, Vitória", cid: "BH", obs: "Após as 18:00 (1 UNIDADE)", cnpj: "00.000.000/0001-19", status: 'pendente' },
+            { id: 20, emp: "Jeinny Valadares", end: "R. ministro orozimbo nonato 102, Vila da Serra", cid: "Nova Lima", obs: "Ligar 31998621638", cnpj: "00.000.000/0001-20", status: 'pendente' },
+            { id: 21, emp: "Dr. Cristiano", end: "R. Senhora da Boa Viagem 227, Ouro Minas", cid: "BH", obs: "2 UNIDADES", cnpj: "00.000.000/0001-21", status: 'pendente' },
+            { id: 22, emp: "Elisa", end: "R. Trucal 57, Goiânia", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-22", status: 'pendente' },
+            { id: 23, emp: "Dog e Cia", end: "Rua Marco Aurelio 127, Nazaré", cid: "BH", obs: "Após as 18:00 (1 UNIDADE)", cnpj: "00.000.000/0001-23", status: 'pendente' },
+            { id: 24, emp: "Francisco", end: "Rua Jacui 761, Colégio Batista", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-24", status: 'pendente' },
+            { id: 25, emp: "Debora", end: "Rua Itapagipe 456, Concordia", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-25", status: 'pendente' },
+            { id: 26, emp: "A Confirmar", end: "Rua Aarão Reis 490, Centro", cid: "BH", obs: "A CONFIRMAR", cnpj: "00.000.000/0001-26", status: 'pendente' },
+            { id: 27, emp: "Luiza Advocacia", end: "Rua Rio de Janeiro 1320, Lourdes", cid: "BH", obs: "Apto 601 (1 UNIDADE)", cnpj: "00.000.000/0001-27", status: 'pendente' },
+            { id: 28, emp: "Fabiano", end: "R. Antonio Jardim 430, Centro", cid: "Nova Lima", obs: "1 UNIDADE", cnpj: "00.000.000/0001-28", status: 'pendente' },
+            { id: 29, emp: "Leticia", end: "Av. Barbacena 1018 sala 01, Santo Agostinho", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-29", status: 'pendente' },
+            { id: 30, emp: "Estúdio Lua (Luiza)", end: "R. Rio Grande do Norte 1550, Savassi", cid: "BH", obs: "Após as 18:00 (1 UNIDADE)", cnpj: "00.000.000/0001-30", status: 'pendente' },
+            { id: 31, emp: "Leila", end: "Rua Cristina 920 apto 303, São Pedro", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-31", status: 'pendente' },
+            { id: 32, emp: "Laryssa", end: "Rua Professor Julio Mourao 163, Luxemburgo", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-32", status: 'pendente' },
+            { id: 33, emp: "Ana Paula", end: "Rua Zurick 280 bl 01 apto 102, Calafate", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-33", status: 'pendente' },
+            { id: 34, emp: "Barbara", end: "Rua Zurick 874 apto 1102, Nova Suiça", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-34", status: 'pendente' },
+            { id: 35, emp: "Rafael e Rodrigo", end: "Rua Albita 131, 6 andar", cid: "BH", obs: "2 UNIDADES", cnpj: "00.000.000/0001-35", status: 'pendente' },
+            { id: 36, emp: "Escola Pequeno Príncipe", end: "Rua Sete de Abril 614, Esplanada", cid: "BH", obs: "3 UNIDADES", cnpj: "00.000.000/0001-36", status: 'pendente' },
+            { id: 37, emp: "Ronny Vidros", end: "Rua Penha 86, Esplanada", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-37", status: 'pendente' },
+            { id: 38, emp: "Distribuidora Quarteto", end: "Rua Belém 801, Pompeia", cid: "BH", obs: "Após 18:00 (1 UNIDADE)", cnpj: "00.000.000/0001-38", status: 'pendente' },
+            { id: 39, emp: "Ferragista Belem Amando", end: "R. Casa Branca 465, Pompeia", cid: "BH", obs: "Até as 18:00 (1 UNIDADE)", cnpj: "00.000.000/0001-39", status: 'pendente' },
+            { id: 40, emp: "Wagner Mecânica", end: "Rua Leopoldo Gomes 758, Pompeia", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-40", status: 'pendente' },
+            { id: 41, emp: "Ferragista Belem", end: "Rua Belém 1245, Saudade", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-41", status: 'pendente' },
+            { id: 42, emp: "Mateus e Ivan", end: "Rua Padre Feijo 890, Vera Cruz", cid: "BH", obs: "Após as 18:00 (2 UNIDADES)", cnpj: "00.000.000/0001-42", status: 'pendente' },
+            { id: 43, emp: "Michelle", end: "Rua Diana 472, Ana Lúcia", cid: "Sabará", obs: "1 UNIDADE", cnpj: "00.000.000/0001-43", status: 'pendente' },
+            { id: 44, emp: "Bruno", end: "Rua Boaventura 771, Indaiá", cid: "BH", obs: "1 UNIDADE", cnpj: "00.000.000/0001-44", status: 'pendente' },
+            { id: 45, emp: "Agnaldo", end: "Rua Campanha 69, Alvorada", cid: "Sabará", obs: "1 UNIDADE", cnpj: "60.756.721/0001-58", status: 'pendente' },
+            { id: 46, emp: "Tati Restaurante", end: "Rua Canápolis 119, Fátima", cid: "Sabará", obs: "Até as 15:00 (1 UNIDADE)", cnpj: "63.845.902/0001-49", status: 'pendente' },
+            { id: 47, emp: "Lisandra", end: "Rua Grão Mogol 253, Fátima", cid: "Sabará", obs: "2 UNIDADES", cnpj: "00.000.000/0001-47", status: 'pendente' }
+        ];
+
+        let state = JSON.parse(localStorage.getItem('mont_v12')) || initialAddresses;
+        let kmIni = localStorage.getItem('km_ini') || '';
+        let kmFim = localStorage.getItem('km_fim') || '';
+        let kmPhoto = localStorage.getItem('km_photo') || null;
+        let activeTab = 'rota';
+
+        function save() { 
+            localStorage.setItem('mont_v12', JSON.stringify(state)); 
+            render(); 
+        }
+
+        function saveKms() {
+            kmIni = document.getElementById('km-inicial').value;
+            kmFim = document.getElementById('km-final').value;
+            localStorage.setItem('km_ini', kmIni);
+            localStorage.setItem('km_fim', kmFim);
+            updateKmStatus();
+        }
+
+        function updateKmStatus() {
+            const dot = document.getElementById('km-status-dot');
+            if (kmIni && kmFim) dot.className = "w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_5px_#06b6d4]";
+            else if (kmIni || kmFim) dot.className = "w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_5px_#f59e0b]";
+            else dot.className = "w-2 h-2 rounded-full bg-slate-700";
+        }
+
+        function uploadKm(e) {
+            const file = e.target.files[0];
+            if(file) {
+                const r = new FileReader();
+                r.onload = (ev) => { 
+                    kmPhoto = ev.target.result; 
+                    localStorage.setItem('km_photo', kmPhoto); 
+                    document.getElementById('cam-icon').classList.add('text-emerald-400');
+                    render(); 
+                };
+                r.readAsDataURL(file);
+            }
+        }
+
+        function setStatus(id, s) {
+            const idx = state.findIndex(x => x.id === id);
+            state[idx].status = (state[idx].status === s) ? 'pendente' : s;
+            save();
+        }
+
+        function setTab(t) {
+            activeTab = t;
+            document.querySelectorAll('nav button').forEach(b => {
+                const isActive = b.id === `tab-${t}`;
+                b.classList.toggle('tab-active', isActive);
+                b.classList.toggle('text-slate-400', !isActive);
+            });
+            render();
+        }
+
+        async function generatePDF() {
+            const rows = state.filter(x => x.status !== 'pendente');
+            if(rows.length === 0) return alert("Marque ao menos uma entrega.");
+
+            const totalKm = (parseInt(kmFim) || 0) - (parseInt(kmIni) || 0);
+
+            document.getElementById('pdf-date-field').innerText = new Date().toLocaleDateString('pt-BR');
+            document.getElementById('pdf-km-total').innerText = `${totalKm > 0 ? totalKm : 0} KM PERCORRIDOS`;
+            document.getElementById('pdf-km-ini').innerText = kmIni || '0';
+            document.getElementById('pdf-km-fim').innerText = kmFim || '0';
+            document.getElementById('pdf-count-ok').innerText = rows.filter(x => x.status === 'concluida').length;
+
+            const imgBox = document.getElementById('pdf-km-img-box');
+            const noPhoto = document.getElementById('pdf-no-photo');
+            if(kmPhoto) { 
+                imgBox.src = kmPhoto; 
+                imgBox.style.display = 'block'; 
+                noPhoto.style.display = 'none';
+            } else { 
+                imgBox.style.display = 'none'; 
+                noPhoto.style.display = 'block';
+            }
+
+            document.getElementById('pdf-rows').innerHTML = rows.map(r => `
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 10px; font-weight: bold; width: 30%;">${r.emp}</td>
+                    <td style="padding: 10px; color: #475569; font-size: 9px;">${r.end}</td>
+                    <td style="padding: 10px; text-align: center; font-weight: 900; color: ${r.status==='concluida'?'#10b981':'#ef4444'}">${r.status.toUpperCase()}</td>
+                </tr>
+            `).join('');
+            
+            const canvas = await html2canvas(document.getElementById('pdf-template'), {scale: 2});
+            const pdf = new jspdf.jsPDF();
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, 190, (canvas.height*190)/canvas.width);
+            pdf.save(`Contas_Monttiro_${new Date().toISOString().slice(0,10)}.pdf`);
+        }
+
+        function render() {
+            const container = document.getElementById('list-container');
+            container.innerHTML = '';
+            
+            document.getElementById('km-inicial').value = kmIni;
+            document.getElementById('km-final').value = kmFim;
+            updateKmStatus();
+
+            if(kmPhoto) document.getElementById('cam-icon').className = "w-3.5 h-3.5 text-emerald-400";
+
+            let list = [];
+            if(activeTab === 'clientes') list = state;
+            else if(activeTab === 'rota') list = state.filter(x => x.status === 'pendente');
+            else list = state.filter(x => x.status !== 'pendente');
+
+            list.forEach(item => {
+                const div = document.createElement('div');
+                div.className = `bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 transition-all ${item.status==='concluida'?'card-done scale-[0.98]':item.status==='falha'?'card-fail scale-[0.98]':''}`;
+                div.dataset.id = item.id;
+                
+                if(activeTab === 'clientes') {
+                    div.innerHTML = `
+                        <div class="flex-grow">
+                            <p class="text-[6px] font-black text-cyan-600 uppercase mb-0.5">${item.cnpj}</p>
+                            <h3 class="text-[10px] font-bold text-slate-800">${item.emp}</h3>
+                            <p class="text-[8px] text-slate-500">${item.end}</p>
+                        </div>
+                    `;
+                } else {
+                    div.innerHTML = `
+                        <div class="drag-handle text-slate-200 cursor-grab active:cursor-grabbing"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 7h2v2H7V7zm0 4h2v2H7v-2zm4-4h2v2h-2V7zm0 4h2v2h-2v-2z"/></svg></div>
+                        <div class="flex-grow min-w-0">
+                            <h3 class="text-[10px] font-bold truncate text-slate-800">${item.emp}</h3>
+                            <p class="text-[8px] text-slate-500 truncate mb-1">${item.end}</p>
+                            <span class="text-[7px] bg-slate-100 px-1.5 py-0.5 rounded font-black text-cyan-700 border border-slate-200">${item.obs}</span>
+                        </div>
+                        <div class="flex gap-1.5">
+                            <button onclick="setStatus(${item.id}, 'falha')" class="p-2 rounded-lg border transition-all ${item.status==='falha'?'bg-red-500 border-red-600 text-white shadow-lg':'border-slate-100 text-slate-300'}"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"/></svg></button>
+                            <button onclick="setStatus(${item.id}, 'concluida')" class="p-2 rounded-lg border transition-all ${item.status==='concluida'?'bg-emerald-500 border-emerald-600 text-white shadow-lg':'border-slate-100 text-slate-300'}"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-width="3"/></svg></button>
+                        </div>
+                    `;
+                }
+                container.appendChild(div);
+            });
+
+            document.getElementById('count-total').innerText = state.length;
+            document.getElementById('count-feito').innerText = state.filter(x => x.status !== 'pendente').length;
+
+            if(activeTab === 'rota') Sortable.create(container, { 
+                handle: '.drag-handle', 
+                animation: 150,
+                onEnd: () => {
+                    const ids = Array.from(container.children).map(c => parseInt(c.dataset.id));
+                    const others = state.filter(x => x.status !== 'pendente');
+                    const sorted = ids.map(id => state.find(x => x.id === id));
+                    state = [...sorted, ...others];
+                    save();
+                }
+            });
+        }
+
+        render();
+    </script>
+</body>
+</html>
