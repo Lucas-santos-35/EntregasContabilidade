@@ -1,0 +1,17 @@
+{
+  "name": "Monttirô Logística",
+  "short_name": "Monttirô",
+  "description": "Sistema de Prestação de Contas e Logística Monttirô",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2991/2991231.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
